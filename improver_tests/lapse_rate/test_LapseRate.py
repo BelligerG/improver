@@ -66,30 +66,39 @@ class Test__calc_lapse_rate(IrisTest):
         """Sets up arrays."""
 
         self.temperature = np.array(
-            [280.06, 279.97, 279.90, 280.15, 280.03, 279.96, 280.25, 280.33, 280.27]
+            [
+                [280.06, 279.97, 279.90],
+                [280.15, 280.03, 279.96],
+                [280.25, 280.33, 280.27],
+            ]
         )
         self.orography = np.array(
-            [174.67, 179.87, 188.46, 155.84, 169.58, 185.05, 134.90, 144.00, 157.89]
+            [
+                [174.67, 179.87, 188.46],
+                [155.84, 169.58, 185.05],
+                [134.90, 144.00, 157.89],
+            ]
         )
+        self.land_sea_mask = ~np.zeros_like(self.temperature, dtype=bool)
 
     def test_returns_expected_values(self):
         """Test that the function returns expected lapse rate. """
 
         expected_out = -0.00765005774676
-        result = LapseRate(nbhood_radius=1)._calc_lapse_rate(
-            self.temperature, self.orography
-        )
+        result = LapseRate(nbhood_radius=1)._generate_lapse_rate_array(
+            self.temperature, self.orography, self.land_sea_mask
+        )[1, 1]
         self.assertArrayAlmostEqual(result, expected_out)
 
     def test_handles_nan(self):
         """Test that the function returns DALR value when central point
            is NaN."""
 
-        self.temperature[4] = np.nan
+        self.temperature[..., 1, 1] = np.nan
         expected_out = DALR
-        result = LapseRate(nbhood_radius=1)._calc_lapse_rate(
-            self.temperature, self.orography
-        )
+        result = LapseRate(nbhood_radius=1)._generate_lapse_rate_array(
+            self.temperature, self.orography, self.land_sea_mask
+        )[1, 1]
         self.assertArrayAlmostEqual(result, expected_out)
 
 
@@ -101,10 +110,24 @@ class Test__create_heightdiff_mask(IrisTest):
 
         self.orography = np.array(
             [
-                [35, 40, 20, 10, 0, 10, 20, -30, -40],
-                [35, 40, 20, 10, 0, 10, 20, -30, -40],
+                [[35, 40, 20], [10, 0, 10], [20, -30, -40]],
+                [[35, 40, 20], [10, 0, 10], [20, -30, -40]],
             ]
         )
+
+    def height_diff_tests(self, expected_out, max_height_diff=35):
+        """Tests the _create_height_diff_mask function.
+
+        Args:
+            expected_out:
+                3d numpy array containing booleans, this needs to be the same shape as the orography data.
+            max_height_diff:
+                maximum height difference allowed in the orography data
+         """
+        result = LapseRate(
+            max_height_diff=max_height_diff, nbhood_radius=1
+        )._create_height_diff_mask(self.orography)
+        self.assertArrayAlmostEqual(result, expected_out)
 
     def test_returns_expected_values(self):
         """Test that the function returns True at points where the height
@@ -112,32 +135,12 @@ class Test__create_heightdiff_mask(IrisTest):
 
         expected_out = np.array(
             [
-                [True, True, False, False, False, False, False, False, True],
-                [True, True, False, False, False, False, False, False, True],
+                [[False, False, True], [True, True, True], [True, True, False]],
+                [[False, False, True], [True, True, True], [True, True, False]],
             ]
         )
 
-        result = LapseRate(nbhood_radius=1)._create_heightdiff_mask(self.orography)
-        self.assertArrayAlmostEqual(result, expected_out)
-
-    def test_returns_expected_values_generator(self):
-        """Test that the function returns True at points where the height
-           difference to the central pixel is greater than 35m."""
-
-        expected_out = np.array(
-            [[True, True, False, False, False, False, False, False, True],
-             [True, True, False, False, False, False, False, False, True]])
-
-        result = np.zeros(expected_out.shape, dtype=bool)
-        gen = LapseRate(nbhood_radius=1)._generate_heightdiff_mask(
-            self.orography)
-
-        count = 0
-        for val in gen:
-            result[count] = val
-            count += 1
-
-        self.assertArrayAlmostEqual(result, expected_out)
+        self.height_diff_tests(expected_out)
 
     def test_change_height_thresh(self):
         """Test that the function performs as expected when the height
@@ -145,35 +148,12 @@ class Test__create_heightdiff_mask(IrisTest):
 
         expected_out = np.array(
             [
-                [False, True, False, False, False, False, False, False, True],
-                [False, True, False, False, False, False, False, False, True],
+                [[True, False, True], [True, True, True], [True, True, False]],
+                [[True, False, True], [True, True, True], [True, True, False]],
             ]
         )
 
-        result = LapseRate(max_height_diff=40, nbhood_radius=1)._create_heightdiff_mask(
-            self.orography
-        )
-        self.assertArrayAlmostEqual(result, expected_out)
-
-    def test_change_height_thresh_generator(self):
-        """Test that the function performs as expected when the height
-           difference threshold has been changed."""
-
-        expected_out = np.array(
-            [[False, True, False, False, False, False, False, False, True],
-             [False, True, False, False, False, False, False, False, True]])
-
-        result = np.zeros(expected_out.shape, dtype=bool)
-        gen = LapseRate(max_height_diff=40,
-                        nbhood_radius=1)._generate_heightdiff_mask(
-            self.orography)
-
-        count = 0
-        for val in gen:
-            result[count] = val
-            count += 1
-
-        self.assertArrayAlmostEqual(result, expected_out)
+        self.height_diff_tests(expected_out, max_height_diff=40)
 
 
 class Test_process(IrisTest):
@@ -352,25 +332,13 @@ class Test_process(IrisTest):
         ignored_messages=["invalid value encountered in greater_equal"],
         warning_types=[RuntimeWarning],
     )
-    def test_constant_temp_orog(self):
+    def test_constant_orog(self):
         """Test that the function returns expected DALR values where the
-           temperature and orography fields are constant values.
+           orography fields are constant values.
         """
-        expected_out = np.array(
-            [
-                [
-                    [0.0082, 0.0081, 0.0081, DALR, DALR],
-                    [0.0081, 0.008, 0.008, DALR, DALR],
-                    [0.0081, 0.008, 0.008, DALR, DALR],
-                    [DALR, DALR, DALR, DALR, DALR],
-                    [DALR, DALR, DALR, DALR, DALR],
-                ]
-            ]
-        )
+        expected_out = np.full((1, 5, 5), DALR)
 
         self.temperature.data[:, :, :] = 0.08
-        # The array should contain non DALR values around this single point
-        # and DALR values elsewhere.
         self.temperature.data[:, 1, 1] = 0.09
         self.orography.data[:, :] = 10
 
@@ -420,11 +388,11 @@ class Test_process(IrisTest):
         expected_out = np.array(
             [
                 [
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
+                    [0.0294, 0.0294, 0.0294, 0.0, DALR],
+                    [0.0294, 0.0294, 0.0294, 0.0, DALR],
+                    [0.0294, 0.0294, 0.0294, 0.0, DALR],
+                    [0.0294, 0.0294, 0.0294, 0.0, DALR],
+                    [0.0294, 0.0294, 0.0294, 0.0, DALR],
                 ]
             ]
         )
@@ -435,6 +403,8 @@ class Test_process(IrisTest):
         self.temperature.data[:, :, 3] = -1
         self.temperature.data[:, :, 4] = -2
         self.orography.data[:, :] = 10
+        self.orography.data[:, 0] = 15
+        self.orography.data[:, 3] = 0
 
         result = LapseRate(nbhood_radius=1).process(
             self.temperature, self.orography, self.land_sea_mask
@@ -466,6 +436,8 @@ class Test_process(IrisTest):
         self.temperature.data[:, :, 3] = -1
         self.temperature.data[:, :, 4] = -2
         self.orography.data[:, :] = 10
+        self.orography.data[:, 0] = 15
+        self.orography.data[:, 2] = 0
 
         result = LapseRate(nbhood_radius=1, max_lapse_rate=-4 * DALR).process(
             self.temperature, self.orography, self.land_sea_mask
@@ -498,6 +470,9 @@ class Test_process(IrisTest):
         self.temperature.data[:, :, 3] = -1
         self.temperature.data[:, :, 4] = -2
         self.orography.data[:, :] = 10
+        self.orography.data[:, 0] = 15
+        self.orography.data[:, 2] = 0
+        self.orography.data[:, 4] = 12
 
         result = LapseRate(nbhood_radius=1, min_lapse_rate=2 * DALR).process(
             self.temperature, self.orography, self.land_sea_mask
@@ -530,6 +505,9 @@ class Test_process(IrisTest):
         self.temperature.data[:, :, 3] = -1
         self.temperature.data[:, :, 4] = -2
         self.orography.data[:, :] = 10
+        self.orography.data[:, 0] = 15
+        self.orography.data[:, 2] = 0
+        self.orography.data[:, 4] = 12
 
         result = LapseRate(
             nbhood_radius=1, max_lapse_rate=-4 * DALR, min_lapse_rate=2 * DALR
@@ -548,22 +526,26 @@ class Test_process(IrisTest):
         expected_out = np.array(
             [
                 [
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
-                    [0.0294, 0.0294, DALR, DALR, DALR],
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
+                    [DALR, 0.015, 0.01, 0.006428571, 0.005],
+                    [DALR, 0.015, 0.01, 0.00625, 0.005],
+                    [DALR, 0.015, DALR, 0.00625, 0.005],
+                    [DALR, 0.015, 0.01, 0.00625, 0.005],
+                    [DALR, 0.015, 0.01, 0.006428571, 0.005],
                 ]
             ]
         )
 
         # West data points should be -3*DALR and East should be DALR.
-        self.temperature.data[:, :, 0] = 2
-        self.temperature.data[:, :, 1] = 1
-        self.temperature.data[:, :, 3] = -1
-        self.temperature.data[:, :, 4] = -2
+        self.temperature.data[:, :, 0] = -0.2
+        self.temperature.data[:, :, 1] = -0.1
+        self.temperature.data[:, :, 2] = 0.0
+        self.temperature.data[:, :, 3] = 0.1
+        self.temperature.data[:, :, 4] = 0.2
         self.temperature.data[:, 2, 2] = np.nan
-        self.orography.data[:, :] = 10
+        self.orography.data[:, 0:2] = 0
+        self.orography.data[:, 2] = 10
+        self.orography.data[:, 3] = 20
+        self.orography.data[:, 4] = 40
 
         result = LapseRate(nbhood_radius=1).process(
             self.temperature, self.orography, self.land_sea_mask
@@ -581,9 +563,9 @@ class Test_process(IrisTest):
         expected_out = np.array(
             [
                 [
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
-                    [0.0294, 0.0294, 0.0, DALR, DALR],
+                    [DALR, 0.003, 0.006, 0.009, DALR],
+                    [DALR, 0.003, 0.006, 0.009, DALR],
+                    [DALR, 0.003, 0.006, 0.009, DALR],
                     [DALR, DALR, DALR, DALR, DALR],
                     [DALR, DALR, DALR, DALR, DALR],
                 ]
@@ -592,11 +574,13 @@ class Test_process(IrisTest):
 
         # West data points should be -3*DALR and East should be DALR, South
         # should be zero.
-        self.temperature.data[:, :, 0] = 2
-        self.temperature.data[:, :, 1] = 1
-        self.temperature.data[:, :, 3] = -1
-        self.temperature.data[:, :, 4] = -2
+        self.temperature.data[:, :, 0] = 0.02
+        self.temperature.data[:, :, 1] = 0.01
+        self.temperature.data[:, :, 2] = 0.03
+        self.temperature.data[:, :, 3] = -0.01
+        self.temperature.data[:, :, 4] = -0.02
         self.orography.data[:, :] = 10
+        self.orography.data[:, 2] = 15
         self.land_sea_mask.data[3:5, :] = 0
 
         result = LapseRate(nbhood_radius=1).process(
@@ -617,7 +601,7 @@ class Test_process(IrisTest):
                 [
                     [DALR, DALR, DALR, -0.00642857, -0.005],
                     [DALR, DALR, DALR, -0.0065517, -0.003],
-                    [DALR, DALR, DALR, -0.0065517, 0.0],
+                    [DALR, DALR, DALR, -0.0065517, DALR],
                     [DALR, DALR, DALR, -0.0065517, -0.003],
                     [DALR, DALR, DALR, -0.00642857, -0.005],
                 ]
