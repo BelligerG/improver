@@ -58,6 +58,40 @@ def collapsed(cube, *args, **kwargs):
             A collapsed cube where the cell methods match the input cube.
     """
     original_methods = cube.cell_methods
+
+    weights = kwargs.pop("weights", None)
+    # Check the weights exist and that that it's a mean function we want
+    if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN:
+        blend_coord = args[0]
+        coords = cube.coord(blend_coord)
+
+        # FIXME
+        #  This can be fixed by using cube.coord_dims(blend_coord) to get the actual blending dimension
+        matches = [(coord_, dim) for coord_, dim in cube._dim_coords_and_dims]
+        print(matches)
+        dims_to_collapse = (matches[0])
+
+        untouched_dim = set(range(cube.ndim)) - set(dims_to_collapse)
+
+        indices = [slice(None)]*cube.ndim
+        indices[dims_to_collapse[1]] = 0
+
+        cube_new = cube[tuple(indices)].copy()
+
+        cube_new.data = weights[0].data*cube[tuple(indices)].data
+        for i in range(1, dims_to_collapse[0].shape[0]):
+            indices[dims_to_collapse[1]] = i            
+            cube_new.data += cube[tuple(indices)].data * weights[i].data
+
+        for coord in cube.dim_coords + cube.aux_coords:
+            coord_dims = cube.coord_dims(coord)
+
+            if set(dims_to_collapse).intersection(coord_dims):
+                local_dims = [coord_dims.index(dim) for dim in dims_to_collapse if dim in coord_dims]
+                cube_new.replace_coord(coord.collapsed(local_dims))
+
+        return cube_new
+
     new_cube = cube.collapsed(*args, **kwargs)
     new_cube.cell_methods = original_methods
     return new_cube
