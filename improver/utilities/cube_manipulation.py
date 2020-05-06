@@ -57,30 +57,30 @@ def collapsed(cube, *args, **kwargs):
         iris.cube.Cube:
             A collapsed cube where the cell methods match the input cube.
     """
+    # TODO:
+    #  Make this general for ALL iris aggregators
+    #  Currently not working for use_nbhood test
+    #  Try is weights is not None? check that it works with a masked array in use nbhood
     original_methods = cube.cell_methods
 
-    weights = kwargs.pop("weights", None)
+    weights = kwargs.get("weights", None)
     # Check the weights exist and that that it's a mean function we want
     if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN:
         blend_coord = args[0]
         coords = cube.coord(blend_coord)
-
-        # FIXME
-        #  This can be fixed by using cube.coord_dims(blend_coord) to get the actual blending dimension
-        matches = [(coord_, dim) for coord_, dim in cube._dim_coords_and_dims]
-        print(matches)
-        dims_to_collapse = (matches[0])
+        dims_to_collapse = cube.coord_dims(blend_coord)
 
         untouched_dim = set(range(cube.ndim)) - set(dims_to_collapse)
 
         indices = [slice(None)]*cube.ndim
-        indices[dims_to_collapse[1]] = 0
+        indices[dims_to_collapse[0]] = 0
 
         cube_new = cube[tuple(indices)].copy()
 
+        print(weights[0].data)
         cube_new.data = weights[0].data*cube[tuple(indices)].data
-        for i in range(1, dims_to_collapse[0].shape[0]):
-            indices[dims_to_collapse[1]] = i            
+        for i in range(1, coords.shape[0]):
+            indices[dims_to_collapse[0]] = i            
             cube_new.data += cube[tuple(indices)].data * weights[i].data
 
         for coord in cube.dim_coords + cube.aux_coords:

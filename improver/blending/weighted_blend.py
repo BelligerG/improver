@@ -718,16 +718,9 @@ class WeightedBlendAcrossWholeDimension(PostProcessingPlugin):
                 The cube with values blended over self.blend_coord, with
                 suitable weightings applied.
         """
-        #weights_array = self.non_percentile_weights(cube, weights)
-
-        # Calculate the weighted average.
-        #cube_new = collapsed(
-        #    cube, self.blend_coord, iris.analysis.MEAN, weights=weights_array
-        #)
         cube_new = collapsed(
              cube, self.blend_coord, iris.analysis.MEAN, weights=weights
         )
-        #cube_new.data = cube_new.data.astype(np.float32)
 
         return cube_new
 
