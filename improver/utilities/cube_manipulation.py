@@ -64,7 +64,7 @@ def collapsed(cube, *args, **kwargs):
 
     weights = kwargs.get("weights", None)
     # Check the weights exist and that that it's a mean function we want and no masked data
-    if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN and not (hasattr(weights.data, 'mask') or hasattr(cube.data, 'mask')):
+    if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN:
         blend_coord = args[0]
         coords = cube.coord(blend_coord)
         dims_to_collapse = cube.coord_dims(blend_coord)
