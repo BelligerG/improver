@@ -60,12 +60,11 @@ def collapsed(cube, *args, **kwargs):
     # TODO:
     #  Make this general for ALL iris aggregators
     #  Currently not working for use_nbhood test
-    #  Try is weights is not None? check that it works with a masked array in use nbhood
     original_methods = cube.cell_methods
 
     weights = kwargs.get("weights", None)
-    # Check the weights exist and that that it's a mean function we want
-    if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN:
+    # Check the weights exist and that that it's a mean function we want and no masked data
+    if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN and not (hasattr(weights.data, 'mask') or hasattr(cube.data, 'mask')):
         blend_coord = args[0]
         coords = cube.coord(blend_coord)
         dims_to_collapse = cube.coord_dims(blend_coord)
@@ -76,12 +75,18 @@ def collapsed(cube, *args, **kwargs):
         indices[dims_to_collapse[0]] = 0
 
         cube_new = cube[tuple(indices)].copy()
-
-        print(weights[0].data)
-        cube_new.data = weights[0].data*cube[tuple(indices)].data
-        for i in range(1, coords.shape[0]):
-            indices[dims_to_collapse[0]] = i            
+        cube_new.data = np.zeros_like(cube[tuple(indices)].data)
+      
+        # used to normalise the data 
+        weights_total = np.zeros_like(weights[0].data)
+        for i in range(coords.shape[0]):
+            indices[dims_to_collapse[0]] = i
             cube_new.data += cube[tuple(indices)].data * weights[i].data
+
+            weights_total += weights[i].data
+
+        # normalise the data
+        cube_new.data *= (1/weights_total)
 
         for coord in cube.dim_coords + cube.aux_coords:
             coord_dims = cube.coord_dims(coord)
