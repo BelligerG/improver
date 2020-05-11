@@ -64,7 +64,7 @@ def collapsed(cube, *args, **kwargs):
 
     weights = kwargs.get("weights", None)
     # Check the weights exist and that that it's a mean function we want and no masked data
-    if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN:
+    if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN and not hasattr(cube.data, 'mask'):
         blend_coord = args[0]
         coords = cube.coord(blend_coord)
         dims_to_collapse = cube.coord_dims(blend_coord)
@@ -94,7 +94,6 @@ def collapsed(cube, *args, **kwargs):
             if set(dims_to_collapse).intersection(coord_dims):
                 local_dims = [coord_dims.index(dim) for dim in dims_to_collapse if dim in coord_dims]
                 cube_new.replace_coord(coord.collapsed(local_dims))
-
         return cube_new
 
     new_cube = cube.collapsed(*args, **kwargs)
