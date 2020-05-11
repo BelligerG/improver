@@ -64,7 +64,11 @@ def collapsed(cube, *args, **kwargs):
 
     weights = kwargs.get("weights", None)
     # Check the weights exist and that that it's a mean function we want and no masked data
-    if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN and not hasattr(cube.data, 'mask'):
+    #if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN and not hasattr(cube.data, 'mask'):
+    if weights is not None and args[1] == iris.analysis.MEAN:
+        if isinstance(weights, iris.cube.Cube):
+            weights = weights.data
+
         blend_coord = args[0]
         coords = cube.coord(blend_coord)
         dims_to_collapse = cube.coord_dims(blend_coord)
@@ -74,27 +78,42 @@ def collapsed(cube, *args, **kwargs):
         indices = [slice(None)]*cube.ndim
         indices[dims_to_collapse[0]] = 0
 
-        cube_new = cube[tuple(indices)].copy()
-        cube_new.data = np.zeros_like(cube[tuple(indices)].data)
-      
-        # used to normalise the data 
-        weights_total = np.zeros_like(weights[0].data)
-        for i in range(coords.shape[0]):
-            indices[dims_to_collapse[0]] = i
-            cube_new.data += cube[tuple(indices)].data * weights[i].data
+        new_cube = cube[tuple(indices)].copy()
+        new_cube.data = np.zeros_like(cube[tuple(indices)].data)
 
-            weights_total += weights[i].data
+        # If both the cube and the weights have masks
+        if (cube.data.mask != False).all() or hasattr(weights, 'mask'):
+            new_cube.mask = (new_cube.data.mask | weights[tuple(indices)].mask)
 
-        # normalise the data
-        cube_new.data *= (1/weights_total)
+            weights_total = np.zeros_like(weights[tuple(indices)])
+            for i in range(coords.shape[0]):
+                indices[dims_to_collapse[0]] = i
+                mask = (cube[tuple(indices)].data.mask | weights[i].mask) & new_cube.mask
+                new_cube.data += cube[tuple(indices)].data * weights[i]
+                new_cube.data.mask = mask
+                weights_total += weights[i]
+
+            new_cube.data *= (1/weights_total)
+            
+        else:
+            # used to normalise the data
+            weights_total = np.zeros_like(weights[0])
+            for i in range(coords.shape[0]):
+                indices[dims_to_collapse[0]] = i
+                new_cube.data += cube[tuple(indices)].data * weights[i]
+
+                weights_total += weights[i]
+
+            # normalise the data
+            new_cube.data *= (1/weights_total)
 
         for coord in cube.dim_coords + cube.aux_coords:
             coord_dims = cube.coord_dims(coord)
 
             if set(dims_to_collapse).intersection(coord_dims):
                 local_dims = [coord_dims.index(dim) for dim in dims_to_collapse if dim in coord_dims]
-                cube_new.replace_coord(coord.collapsed(local_dims))
-        return cube_new
+                new_cube.replace_coord(coord.collapsed(local_dims))
+        return new_cube
 
     new_cube = cube.collapsed(*args, **kwargs)
     new_cube.cell_methods = original_methods
