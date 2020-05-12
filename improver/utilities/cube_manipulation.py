@@ -57,9 +57,6 @@ def collapsed(cube, *args, **kwargs):
         iris.cube.Cube:
             A collapsed cube where the cell methods match the input cube.
     """
-    # TODO:
-    #  Make this general for ALL iris aggregators
-    #  Currently not working for use_nbhood test
     original_methods = cube.cell_methods
 
     weights = kwargs.get("weights", None)
@@ -81,18 +78,21 @@ def collapsed(cube, *args, **kwargs):
         new_cube = cube[tuple(indices)].copy()
         new_cube.data = np.zeros_like(cube[tuple(indices)].data)
 
-        # If both the cube and the weights have masks
-        if (cube.data.mask != False).all() or hasattr(weights, 'mask'):
+        if (cube.data.mask == True).any() or hasattr(weights, 'mask'):
+            if not hasattr(weights, 'mask'):
+                weights = np.ma.masked_array(weights, mask=False)
+
             new_cube.mask = (new_cube.data.mask | weights[tuple(indices)].mask)
 
             weights_total = np.zeros_like(weights[tuple(indices)])
             for i in range(coords.shape[0]):
                 indices[dims_to_collapse[0]] = i
-                mask = (cube[tuple(indices)].data.mask | weights[i].mask) & new_cube.mask
-                new_cube.data += cube[tuple(indices)].data * weights[i]
+                mask = (cube[tuple(indices)].data.mask | weights[tuple(indices)].mask) & new_cube.mask
                 new_cube.data.mask = mask
+                new_cube.data += cube[tuple(indices)].data * weights[tuple(indices)]
                 weights_total += weights[i]
 
+            new_cube.data.mask = mask
             new_cube.data *= (1/weights_total)
             
         else:
