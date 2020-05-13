@@ -78,22 +78,26 @@ def collapsed(cube, *args, **kwargs):
         new_cube = cube[tuple(indices)].copy()
         new_cube.data = np.zeros_like(cube[tuple(indices)].data)
 
-        if (cube.data.mask == True).any() or hasattr(weights, 'mask'):
+        cube_has_mask = False
+        if hasattr(cube.data, 'mask'):
+            if (cube.data.mask == True).any():
+                cube_has_mask = True
+
+        #if (cube.data.mask == True).any() or hasattr(weights, 'mask'):
+        if cube_has_mask or hasattr(weights, 'mask'):
             if not hasattr(weights, 'mask'):
                 weights = np.ma.masked_array(weights, mask=False)
 
-            mask = (new_cube.data.mask | weights[tuple(indices)].mask)
-            new_cube.data = np.ma.array(np.where(cube[tuple(indices)].data.mask, 0, cube[tuple(indices)].data.data)*weights[tuple(indices)].data, mask=mask)
-
             weights_total = np.zeros_like(weights[tuple(indices)])
-            weights_total += weights[tuple(indices)].data
-            for i in range(1, coords.shape[0]):
+            for i in range(0, coords.shape[0]):
                 indices[dims_to_collapse[0]] = i
                 mask = (cube[tuple(indices)].data.mask | weights[tuple(indices)].mask) & new_cube.data.mask
-                new_cube.data = np.ma.array(new_cube.data+(np.where(cube[tuple(indices)].data.mask, 0, cube[tuple(indices)].data.data)*weights[tuple(indices)].data), mask=mask)
+                new_cube.data = np.ma.array(new_cube.data.data+(np.where(cube[tuple(indices)].data.mask, 0, cube[tuple(indices)].data.data)*weights[tuple(indices)].data), mask=mask)
                 weights_total += weights[i].data
 
             new_cube.data *= (1/weights_total)
+            # Previously set the masked values to 0 to correctly calculate the average, so need to replace the masked 0s with the fill_values
+            new_cube.data = np.ma.array(np.where(new_cube.data.mask, cube.data.get_fill_value(), new_cube.data.data), mask = new_cube.data.mask)
             
         else:
             # used to normalise the data
