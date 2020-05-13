@@ -82,17 +82,17 @@ def collapsed(cube, *args, **kwargs):
             if not hasattr(weights, 'mask'):
                 weights = np.ma.masked_array(weights, mask=False)
 
-            new_cube.mask = (new_cube.data.mask | weights[tuple(indices)].mask)
+            mask = (new_cube.data.mask | weights[tuple(indices)].mask)
+            new_cube.data = np.ma.array(np.where(cube[tuple(indices)].data.mask, 0, cube[tuple(indices)].data.data)*weights[tuple(indices)].data, mask=mask)
 
             weights_total = np.zeros_like(weights[tuple(indices)])
-            for i in range(coords.shape[0]):
+            weights_total += weights[tuple(indices)].data
+            for i in range(1, coords.shape[0]):
                 indices[dims_to_collapse[0]] = i
-                mask = (cube[tuple(indices)].data.mask | weights[tuple(indices)].mask) & new_cube.mask
-                new_cube.data.mask = mask
-                new_cube.data += cube[tuple(indices)].data * weights[tuple(indices)]
-                weights_total += weights[i]
+                mask = (cube[tuple(indices)].data.mask | weights[tuple(indices)].mask) & new_cube.data.mask
+                new_cube.data = np.ma.array(new_cube.data+(np.where(cube[tuple(indices)].data.mask, 0, cube[tuple(indices)].data.data)*weights[tuple(indices)].data), mask=mask)
+                weights_total += weights[i].data
 
-            new_cube.data.mask = mask
             new_cube.data *= (1/weights_total)
             
         else:
