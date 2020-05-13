@@ -61,7 +61,7 @@ def collapsed(cube, *args, **kwargs):
 
     weights = kwargs.get("weights", None)
     # Check the weights exist and that that it's a mean function we want and no masked data
-    #if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN and not hasattr(cube.data, 'mask'):
+    # if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN and not hasattr(cube.data, 'mask'):
     if weights is not None and args[1] == iris.analysis.MEAN:
         if isinstance(weights, iris.cube.Cube):
             weights = weights.data
@@ -72,33 +72,51 @@ def collapsed(cube, *args, **kwargs):
 
         untouched_dim = set(range(cube.ndim)) - set(dims_to_collapse)
 
-        indices = [slice(None)]*cube.ndim
+        indices = [slice(None)] * cube.ndim
         indices[dims_to_collapse[0]] = 0
 
         new_cube = cube[tuple(indices)].copy()
         new_cube.data = np.zeros_like(cube[tuple(indices)].data)
 
         cube_has_mask = False
-        if hasattr(cube.data, 'mask'):
+        if hasattr(cube.data, "mask"):
             if (cube.data.mask == True).any():
                 cube_has_mask = True
 
-        #if (cube.data.mask == True).any() or hasattr(weights, 'mask'):
-        if cube_has_mask or hasattr(weights, 'mask'):
-            if not hasattr(weights, 'mask'):
+        # if (cube.data.mask == True).any() or hasattr(weights, 'mask'):
+        if cube_has_mask or hasattr(weights, "mask"):
+            if not hasattr(weights, "mask"):
                 weights = np.ma.masked_array(weights, mask=False)
 
             weights_total = np.zeros_like(weights[tuple(indices)])
             for i in range(0, coords.shape[0]):
                 indices[dims_to_collapse[0]] = i
-                mask = (cube[tuple(indices)].data.mask | weights[tuple(indices)].mask) & new_cube.data.mask
-                new_cube.data = np.ma.array(new_cube.data.data+(np.where(cube[tuple(indices)].data.mask, 0, cube[tuple(indices)].data.data)*weights[tuple(indices)].data), mask=mask)
+                mask = (
+                    cube[tuple(indices)].data.mask | weights[tuple(indices)].mask
+                ) & new_cube.data.mask
+                new_cube.data = np.ma.array(
+                    new_cube.data.data
+                    + (
+                        np.where(
+                            cube[tuple(indices)].data.mask,
+                            0,
+                            cube[tuple(indices)].data.data,
+                        )
+                        * weights[tuple(indices)].data
+                    ),
+                    mask=mask,
+                )
                 weights_total += weights[i].data
 
-            new_cube.data *= (1/weights_total)
+            new_cube.data *= 1 / weights_total
             # Previously set the masked values to 0 to correctly calculate the average, so need to replace the masked 0s with the fill_values
-            new_cube.data = np.ma.array(np.where(new_cube.data.mask, cube.data.get_fill_value(), new_cube.data.data), mask = new_cube.data.mask)
-            
+            new_cube.data = np.ma.array(
+                np.where(
+                    new_cube.data.mask, cube.data.get_fill_value(), new_cube.data.data
+                ),
+                mask=new_cube.data.mask,
+            )
+
         else:
             # used to normalise the data
             weights_total = np.zeros_like(weights[0])
@@ -109,13 +127,17 @@ def collapsed(cube, *args, **kwargs):
                 weights_total += weights[i]
 
             # normalise the data
-            new_cube.data *= (1/weights_total)
+            new_cube.data *= 1 / weights_total
 
         for coord in cube.dim_coords + cube.aux_coords:
             coord_dims = cube.coord_dims(coord)
 
             if set(dims_to_collapse).intersection(coord_dims):
-                local_dims = [coord_dims.index(dim) for dim in dims_to_collapse if dim in coord_dims]
+                local_dims = [
+                    coord_dims.index(dim)
+                    for dim in dims_to_collapse
+                    if dim in coord_dims
+                ]
                 new_cube.replace_coord(coord.collapsed(local_dims))
         return new_cube
 
