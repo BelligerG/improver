@@ -718,8 +718,8 @@ class WeightedBlendAcrossWholeDimension(PostProcessingPlugin):
                 The cube with values blended over self.blend_coord, with
                 suitable weightings applied.
         """
-        if hasattr(cube.data, "mask"):
-            weights = self.non_percentile_weights(cube, weights)
+        #if hasattr(cube.data, "mask"):
+        #    weights = self.non_percentile_weights(cube, weights)
         cube_new = collapsed(
             cube, self.blend_coord, iris.analysis.MEAN, weights=weights
         )
