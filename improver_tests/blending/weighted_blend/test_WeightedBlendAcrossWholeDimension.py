@@ -410,26 +410,6 @@ class Test_percentile_weights(Test_weighted_blend):
         self.assertArrayEqual(self.weights3d.data, result[:, 0, :, :])
 
 
-class Test_non_percentile_weights(Test_weighted_blend):
-
-    """Test the non_percentile_weights function."""
-
-    def test_no_weights_cube_provided(self):
-        """Test that if a weights cube is not provided, the function generates
-        a weights array that will equally weight all fields along the blending
-        coordinate."""
-
-        coord = "forecast_reference_time"
-        plugin = WeightedBlendAcrossWholeDimension(coord)
-        result = plugin.non_percentile_weights(self.cube, None)
-        (blending_coord_length,) = self.cube.coord(coord).shape
-        expected = (np.ones(blending_coord_length) / blending_coord_length).astype(
-            np.float32
-        )
-        self.assertEqual(self.cube.shape, result.shape)
-        self.assertArrayEqual(expected, result[:, 0, 0])
-
-
 class Test_check_weights(Test_weighted_blend):
 
     """Test the check_weights function."""
@@ -552,51 +532,6 @@ class Test_percentile_weighted_mean(Test_weighted_blend):
         self.assertArrayAlmostEqual(
             result.data, np.moveaxis(BLENDED_PERCENTILE_DATA_EQUAL_WEIGHTS, [2], [0])
         )
-
-
-class Test_weighted_mean(Test_weighted_blend):
-
-    """Test the weighted_mean function."""
-
-    @ManageWarnings(ignored_messages=[COORD_COLLAPSE_WARNING])
-    def test_with_weights(self):
-        """Test function when a data cube and a weights cube are provided."""
-
-        coord = "forecast_reference_time"
-        plugin = WeightedBlendAcrossWholeDimension(coord)
-        result = plugin.weighted_mean(self.cube, self.weights1d)
-        expected = np.full((2, 2), 1.5)
-
-        self.assertIsInstance(result, iris.cube.Cube)
-        self.assertArrayAlmostEqual(result.data, expected)
-
-    @ManageWarnings(ignored_messages=[COORD_COLLAPSE_WARNING])
-    def test_with_spatially_varying_weights(self):
-        """Test function when a data cube and a multi dimensional weights cube
-        are provided. This tests spatially varying weights, where each x-y
-        position is weighted differently in each slice along the blending
-        coordinate."""
-
-        coord = "forecast_reference_time"
-        plugin = WeightedBlendAcrossWholeDimension(coord)
-        result = plugin.weighted_mean(self.cube, self.weights3d)
-        expected = np.array([[2.7, 2.1], [2.4, 1.8]])
-
-        self.assertIsInstance(result, iris.cube.Cube)
-        self.assertArrayAlmostEqual(result.data, expected)
-
-    @ManageWarnings(ignored_messages=[COORD_COLLAPSE_WARNING])
-    def test_without_weights(self):
-        """Test function when a data cube is provided, but no weights cube
-        which should result in equal weightings."""
-
-        coord = "forecast_reference_time"
-        plugin = WeightedBlendAcrossWholeDimension(coord)
-        result = plugin.weighted_mean(self.cube, None)
-        expected = np.full((2, 2), 2.0)
-
-        self.assertIsInstance(result, iris.cube.Cube)
-        self.assertArrayAlmostEqual(result.data, expected)
 
 
 class Test_process(Test_weighted_blend):

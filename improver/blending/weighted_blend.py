@@ -555,33 +555,6 @@ class WeightedBlendAcrossWholeDimension(PostProcessingPlugin):
         if not (np.isclose(sum_of_non_zero_weights, 1)).all():
             raise ValueError(msg)
 
-    def non_percentile_weights(self, cube, weights):
-        """
-        Given a 1 or multidimensional cube of weights, reshape and broadcast
-        these in such a way as to make them applicable to the data cube. If no
-        weights are provided, an array of weights is returned that equally
-        weights all slices across the blending coordinate of the cube.
-
-        Args:
-            cube (iris.cube.Cube):
-                The data cube on which a coordinate is being blended.
-            weights (iris.cube.Cube or None):
-                Cube of blending weights or None.
-        Returns:
-            numpy.ndarray:
-                An array of weights that matches the cube data shape.
-        """
-        if weights:
-            weights_array = self.shape_weights(cube, weights)
-        else:
-            (number_of_fields,) = cube.coord(self.blend_coord).shape
-            weights_array = np.broadcast_to(1.0 / number_of_fields, cube.shape).astype(
-                np.float32
-            )
-        (blend_dim,) = cube.coord_dims(self.blend_coord)
-        self.check_weights(weights_array, blend_dim)
-        return weights_array.astype(np.float32)
-
     def percentile_weights(self, cube, weights, perc_coord):
         """
         Given a 1, or multidimensional cube of weights, reshape and broadcast
@@ -702,27 +675,6 @@ class WeightedBlendAcrossWholeDimension(PostProcessingPlugin):
         for coord in cube_new.coords():
             if coord.points.dtype == np.float64:
                 coord.points = coord.points.astype(np.float32)
-        return cube_new
-
-    def weighted_mean(self, cube, weights):
-        """
-        Blend data using a weighted mean using the weights provided.
-
-        Args:
-            cube (iris.cube.Cube):
-                The cube which is being blended over self.blend_coord.
-            weights (iris.cube.Cube or None):
-                Cube of blending weights or None.
-
-        Returns:
-            iris.cube.Cube:
-                The cube with values blended over self.blend_coord, with
-                suitable weightings applied.
-        """
-        cube_new = collapsed(
-            cube, self.blend_coord, iris.analysis.MEAN, weights=weights
-        )
-
         return cube_new
 
     @staticmethod
@@ -895,11 +847,9 @@ class WeightedBlendAcrossWholeDimension(PostProcessingPlugin):
         if perc_coord:
             result = self.percentile_weighted_mean(cube, weights, perc_coord)
         else:
-            result = self.weighted_mean(cube, weights)
+            result = collapsed(
+                cube, self.blend_coord, iris.analysis.MEAN, weights=weights
+            )
         self._update_blended_metadata(result, attributes_dict)
-
-        # Re-mask output
-        if isinstance(cube.data, np.ma.core.MaskedArray):
-            result.data = np.ma.array(result.data)
 
         return result

@@ -42,6 +42,24 @@ from improver.metadata.probabilistic import find_threshold_coordinate
 from improver.utilities.cube_checker import check_cube_coordinates
 
 
+def check_weights_are_equal(weights):
+    """Used to check if all the weights are equal in an n-dimensional (where n > 2) array.
+
+    Args:
+        weights (numpy.ndarray)
+            ndimensional array containing weights for weighted average.
+
+    Returns:
+        bool:
+            True if each weights slice is equal, False if there are any differences.
+    """
+    if weights.shape[0] > 2:
+        comparison = check_weights_are_equal(weights[1:])
+    else:
+        return (weights[0] == weights[1]).all()
+    return comparison & (weights[0] == weights[1]).all()
+
+
 def collapsed(cube, *args, **kwargs):
     """Collapses the cube with given arguments.
 
@@ -85,7 +103,7 @@ def collapsed(cube, *args, **kwargs):
         if cube_has_mask or hasattr(weights, "mask"):
             if not hasattr(weights, "mask"):
                 weights = np.ma.masked_array(weights, mask=False)
-            new_cube.data.mask = (weights[0].mask | new_cube.data.mask)
+            new_cube.data.mask = weights[0].mask | new_cube.data.mask
 
             weights_total = np.zeros_like(weights[0].data)
             fill_mask = np.ones_like(weights_total, dtype=bool)
@@ -95,10 +113,16 @@ def collapsed(cube, *args, **kwargs):
 
                 cube_mask = cube[tuple(indices)].data.mask
                 weights_mask = weights[i].mask
+
+                # Masked values shouldn't count in normalisation, so set them to zero here
                 current_weights = np.where(weights_mask | cube_mask, 0, weights[i].data)
-                if len(current_weights.shape) > 2:
-                    print((current_weights[0] == current_weights[1]).all())
-                    current_weights = current_weights[0]
+                if len(current_weights.shape) > len(weights_total.shape):
+                    if check_weights_are_equal(current_weights):
+                        current_weights = current_weights[0]
+                    else:
+                        weights_total = np.array(
+                            np.broadcast_to(weights_total, current_weights.shape)
+                        )
 
                 fill_mask = fill_mask & cube_mask
 
@@ -114,7 +138,7 @@ def collapsed(cube, *args, **kwargs):
                 weights_total += current_weights
 
             # Update the zero weights to 1 - if zero then the data is masked, avoids a division by zero.
-            weights_total = np.where(weights_total==0, 1, weights_total)
+            weights_total = np.where(weights_total == 0, 1, weights_total)
             new_cube.data *= 1 / weights_total
             new_cube.data = np.ma.array(
                 np.where(fill_mask, cube.data.get_fill_value(), new_cube.data.data),
