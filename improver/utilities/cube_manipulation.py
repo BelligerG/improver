@@ -61,7 +61,6 @@ def collapsed(cube, *args, **kwargs):
 
     weights = kwargs.get("weights", None)
     # Check the weights exist and that that it's a mean function we want and no masked data
-    # if isinstance(weights, iris.cube.Cube) and args[1] == iris.analysis.MEAN and not hasattr(cube.data, 'mask'):
     if weights is not None and args[1] == iris.analysis.MEAN:
         if isinstance(weights, iris.cube.Cube):
             weights = weights.data
@@ -87,7 +86,7 @@ def collapsed(cube, *args, **kwargs):
             if not hasattr(weights, "mask"):
                 weights = np.ma.masked_array(weights, mask=False)
 
-            weights_total = np.zeros_like(weights[0])
+            weights_total = np.zeros_like(cube[tuple(indices)].data)
             fill_mask = np.ones_like(weights_total, dtype=bool)
 
             for i in range(0, coords.shape[0]):
