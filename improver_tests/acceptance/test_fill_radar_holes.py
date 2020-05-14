@@ -28,11 +28,11 @@
 # CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
-"""Tests for the wet-bulb-temperature CLI"""
+"""
+Tests for the fill-radar-holes CLI
+"""
 
 import pytest
-
-from improver.constants import LOOSE_TOLERANCE
 
 from . import acceptance as acc
 
@@ -42,42 +42,11 @@ run_cli = acc.run_cli(CLI)
 
 
 def test_basic(tmp_path):
-    """Test basic wet bulb temperature calculation"""
-    kgo_dir = acc.kgo_root() / "wet-bulb-temperature/basic"
+    """Test interpolating radar holes"""
+    kgo_dir = acc.kgo_root() / "fill-radar-holes/basic"
     kgo_path = kgo_dir / "kgo.nc"
-    input_paths = [
-        kgo_dir / f"enukx_{p}.nc"
-        for p in ("temperature", "relative_humidity", "pressure")
-    ]
+    input_path = kgo_dir / "201811271330_remasked_rainrate_composite.nc"
     output_path = tmp_path / "output.nc"
-    args = [*input_paths, "--output", output_path]
+    args = [input_path, "--output", output_path]
     run_cli(args)
-    acc.compare(output_path, kgo_path, rtol=LOOSE_TOLERANCE)
-
-
-def test_multilevel(tmp_path):
-    """Test wet bulb temperature on multiple levels"""
-    kgo_dir = acc.kgo_root() / "wet-bulb-temperature/multi_level"
-    kgo_path = kgo_dir / "kgo.nc"
-    input_paths = [
-        kgo_dir / f"enukx_multilevel_{p}.nc"
-        for p in ("temperature", "relative_humidity", "pressure")
-    ]
-    output_path = tmp_path / "output.nc"
-    args = [*input_paths, "--convergence-condition", "0.005", "--output", output_path]
-    run_cli(args)
-    acc.compare(output_path, kgo_path, rtol=LOOSE_TOLERANCE)
-
-
-def test_global(tmp_path):
-    """Test wet bulb temperature calculation on global domain"""
-    kgo_dir = acc.kgo_root() / "wet-bulb-temperature/global"
-    kgo_path = kgo_dir / "kgo.nc"
-    input_paths = [
-        kgo_dir / f"{p}_input.nc"
-        for p in ("temperature", "relative_humidity", "pressure")
-    ]
-    output_path = tmp_path / "output.nc"
-    args = [*input_paths, "--output", output_path]
-    run_cli(args)
-    acc.compare(output_path, kgo_path, rtol=LOOSE_TOLERANCE)
+    acc.compare(output_path, kgo_path)

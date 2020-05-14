@@ -35,6 +35,7 @@ import unittest
 
 import iris
 import numpy as np
+import numpy.ma as ma
 from iris.tests import IrisTest
 
 from improver.metadata.utilities import generate_mandatory_attributes
@@ -500,41 +501,51 @@ class Test_fast_linear_fit(IrisTest):
     def setUp(self):
         """Creates some random data to represent x and y."""
         array_size = 25
-        self.x = np.random.random(array_size)
-        self.y = np.random.random(array_size)
+        self.mask = np.zeros(array_size, dtype=bool)
+        self.x_data = ma.masked_array(np.random.random(array_size), mask=self.mask)
+        self.y_data = ma.masked_array(np.random.random(array_size), mask=self.mask)
 
     def use_lstsq(self):
         """Uses numpy's leastsquare algorithm to fit the data as a comparison"""
-        x = np.stack([self.x, np.ones(len(self.x))]).T
-        return np.linalg.lstsq(x, self.y, rcond=-1)[0]
+        x_data = self.x_data[~np.isnan(self.x_data)]
+        y_data = self.y_data[~np.isnan(self.y_data)]
+        x_data = np.stack([x_data, np.ones(len(x_data))]).T
+        return np.linalg.lstsq(x_data, y_data, rcond=-1)[0]
 
-    def linear_fit(self, shape=(25,), axis=-1):
+    def linear_fit(self, shape=(25,), axis=-1, with_nan=False):
         """Compares the output of fast_linear_fit with numpy's leastsquare algorithm."""
         expected_out = self.use_lstsq()
-        x = self.x.reshape(shape)
-        y = self.y.reshape(shape)
-        result = np.array(fast_linear_fit(x, y, axis=axis))
+        x_data = self.x_data.reshape(shape)
+        y_data = self.y_data.reshape(shape)
+        result = np.array(fast_linear_fit(x_data, y_data, axis=axis, with_nan=with_nan))
         self.assertArrayAlmostEqual(expected_out, result)
 
     def test_basic_linear_fit(self):
         """Tests fast_linear_fit with 1D data."""
         self.linear_fit()
 
-    def test_linear_fit_with_2D(self):
+    def test_linear_fit_with_2d(self):
         """Tests fast_linear_fit with 2D data."""
         self.linear_fit(shape=(5, 5), axis=(-2, -1))
 
-    def test_mismatching_shape(self):
-        """Tests fast_linear_fit with mismatching shapes."""
-        x = self.x.reshape(5, 5)
+    def test_mismatch_masks(self):
+        """Tests fast_linear_fit with mismatching masks."""
+        mask = self.mask.copy()
+        mask[12] = True
+        self.x_data = ma.masked_array(self.x_data, mask=mask)
         with self.assertRaises(ValueError):
-            fast_linear_fit(x, self.y)
+            fast_linear_fit(self.x_data, self.y_data)
 
-    def test_mismatch_nans(self):
-        """Tests fast_linear_fit with mismatching nans."""
-        self.x[12] = np.nan
+    def test_mismatch_nans_with_nan(self):
+        """Tests fast_linear_fit with mismatching nans when with_nan is True"""
+        self.x_data[12] = np.nan
         with self.assertRaises(ValueError):
-            fast_linear_fit(self.x, self.y)
+            fast_linear_fit(self.x_data, self.y_data, with_nan=True)
+
+    def test_with_nan(self):
+        """Tests fast_linear_fit when with_nans is True and nans match in x and y data"""
+        self.x_data[12] = self.y_data[12] = np.nan
+        self.linear_fit(with_nan=True)
 
 
 if __name__ == "__main__":

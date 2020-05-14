@@ -43,7 +43,7 @@ def rolling_window(input_array, shape, writeable=False):
             A 2-D array padded with nans for half the
             neighbourhood size.
         shape (tuple(int)):
-            The neighbourhood shape e.g. is the neighbourhood
+            The neighbourhood shape e.g. if the neighbourhood
             size is 3, the shape would be (3, 3) to create a
             3x3 array around each point in the input_array.
         writeable (bool):
@@ -84,12 +84,13 @@ def pad_and_roll(input_array, shape, **kwargs):
             The dataset of points to pad and create rolling windows for.
         shape (tuple(int)):
             Desired shape of the neighbourhood. E.g. if a neighbourhood
-            width of 1 around the point is desired, this shape should be (3, 3):
-                  X X X
-                  X O X
-                  X X X
-            where O is our central neighbourhood point and X represent any point
-            surrounding our central point.
+            width of 1 around the point is desired, this shape should be (3, 3)::
+
+                X X X
+                X O X
+                X X X
+
+            Where O is our central point and X represent the neighbour points.
         kwargs:
             additional keyword arguments passed to `numpy.pad` function.
 
@@ -104,3 +105,101 @@ def pad_and_roll(input_array, shape, **kwargs):
     pad_extent.extend((d // 2, d // 2) for d in shape)
     input_array = np.pad(input_array, pad_extent, **kwargs)
     return rolling_window(input_array, shape, writeable=writeable)
+
+
+def pad_boxsum(data, boxsize, **pad_options):
+    """Pad an array to shape suitable for `boxsum`.
+
+    Args:
+        data (numpy.ndarray):
+            The input data array.
+        boxsize (int or pair of int):
+            The size of the neighbourhood.
+        pad_options (dict):
+            Additional keyword arguments passed to `numpy.pad` function.
+    Returns:
+        numpy.ndarray:
+            Array padded to shape suitable for `boxsum`.
+    """
+    boxsize = np.atleast_1d(boxsize)
+    ih, jh = boxsize[0] // 2, boxsize[-1] // 2
+    padding = [(0, 0)] * (data.ndim - 2) + [(ih + 1, ih), (jh + 1, jh)]
+    padded = np.pad(data, padding, **pad_options)
+    return padded
+
+
+def boxsum(data, boxsize, cumsum=True, **pad_options):
+    """Fast vectorised approach to calculating neighbourhood totals.
+
+    This function makes use of the summed-area table method. An input
+    array is accumulated top to bottom and left to right. This accumulated
+    array can then be used to efficiently calculated the total within a
+    neighbourhood about any point. An example input data array::
+
+        | 1 | 1 | 1 | 1 | 1 |
+        | 1 | 1 | 1 | 1 | 1 |
+        | 1 | 1 | 1 | 1 | 1 |
+        | 1 | 1 | 1 | 1 | 1 |
+
+    is accumulated to become::
+
+        | 1 | 2  | 3  | 4  | 5  |
+        | 2 | 4  | 6  | 8  | 10 |
+        | 3 | 6  | 9  | 12 | 15 |
+        | 4 | 8  | 12 | 16 | 20 |
+        | 5 | 10 | 15 | 20 | 25 |
+
+    If we wish to calculate the total in a 3x3 neighbourhood about
+    some point (*) of our array we use the following points::
+
+        | 1 (C) | 2  | 3     | 4 (D)  | 5  |
+        | 2     | 4  | 6     | 8      | 10 |
+        | 3     | 6  | 9 (*) | 12     | 15 |
+        | 4 (A) | 8  | 12    | 16 (B) | 20 |
+        | 5     | 10 | 15    | 20     | 25 |
+
+    And the calculation is::
+
+        Neighbourhood sum = C - A - D + B
+        = 1 - 4 - 4 + 16
+        = 9
+
+    This is the value we would expect for a 3x3 neighbourhood
+    in an array filled with ones.
+
+    Args:
+        data (numpy.ndarray):
+            The input data array.
+        boxsize (int or pair of int):
+            The size of the neighbourhood. Must be an odd number.
+        cumsum (bool):
+            If False, assume the input data is already cumulative. If True
+            (default), calculate cumsum along the last two dimensions of
+            the input array.
+        pad_options (dict):
+            Additional keyword arguments passed to `numpy.pad` function.
+            If given, the returned result will have the same shape as the input
+            array.
+
+    Returns:
+        numpy.ndarray:
+            Array containing the calculated neighbourhood total.
+    """
+    boxsize = np.atleast_1d(boxsize)
+    if not issubclass(boxsize.dtype.type, np.integer):
+        raise ValueError("The size of the neighbourhood must be of an integer type.")
+    if not np.all(boxsize % 2):
+        raise ValueError("The size of the neighbourhood must be an odd number.")
+    if pad_options:
+        data = pad_boxsum(data, boxsize, **pad_options)
+    if cumsum:
+        data = data.cumsum(-2).cumsum(-1)
+    i, j = boxsize[0], boxsize[-1]
+    m, n = data.shape[-2] - i, data.shape[-1] - j
+    result = (
+        data[..., i : i + m, j : j + n]
+        - data[..., :m, j : j + n]
+        + data[..., :m, :n]
+        - data[..., i : i + m, :n]
+    )
+    return result

@@ -28,60 +28,37 @@
 # CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
-"""
-Tests for the nbhood-iterate-with-mask CLI
-"""
+"""Unit tests for the "round" module"""
 
+
+import numpy as np
 import pytest
 
-from . import acceptance as acc
-
-pytestmark = [pytest.mark.acc, acc.skip_if_kgo_missing]
-CLI = acc.cli_name_with_dashes(__file__)
-run_cli = acc.run_cli(CLI)
+from improver.utilities.round import round_close
 
 
-@pytest.mark.slow
-def test_basic(tmp_path):
-    """Test basic iterate with mask"""
-    kgo_dir = acc.kgo_root() / "nbhood-iterate-with-mask/basic"
-    kgo_path = kgo_dir / "kgo_basic.nc"
-    input_path = kgo_dir / "input.nc"
-    mask_path = kgo_dir / "mask.nc"
-    output_path = tmp_path / "output.nc"
-    args = [
-        input_path,
-        mask_path,
-        "--coord-for-masking",
-        "topographic_zone",
-        "--radii",
-        "20000",
-        "--output",
-        output_path,
-    ]
-    run_cli(args)
-    acc.compare(output_path, kgo_path)
+def test_round_close():
+    """Test output when input is nearly an integer"""
+    result = round_close(29.99999)
+    assert result == 30
+    assert isinstance(result, np.int64)
 
 
-@pytest.mark.slow
-def test_collapse_bands(tmp_path):
-    """Test with collapsing orographic bands"""
-    kgo_dir = acc.kgo_root() / "nbhood-iterate-with-mask/basic_collapse_bands"
-    kgo_path = kgo_dir / "kgo_collapsed.nc"
-    input_path = kgo_dir / "thresholded_input.nc"
-    mask_path = kgo_dir / "orographic_bands_mask.nc"
-    weights_path = kgo_dir / "orographic_bands_weights.nc"
-    output_path = tmp_path / "output.nc"
-    args = [
-        input_path,
-        mask_path,
-        weights_path,
-        "--coord-for-masking",
-        "topographic_zone",
-        "--radii",
-        "10000",
-        "--output",
-        output_path,
-    ]
-    run_cli(args)
-    acc.compare(output_path, kgo_path)
+def test_dtype():
+    """Test near-integer output with specific dtype"""
+    result = round_close(29.99999, dtype=np.int32)
+    assert result == 30
+    assert isinstance(result, np.int32)
+
+
+def test_round_close_array():
+    """Test near-integer output from array input"""
+    expected = np.array([30, 4], dtype=int)
+    result = round_close(np.array([29.999999, 4.0000001]))
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_error_not_close():
+    """Test error when output would require significant rounding"""
+    with pytest.raises(ValueError):
+        round_close(29.9)
