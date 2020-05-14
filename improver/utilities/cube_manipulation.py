@@ -144,7 +144,6 @@ def collapsed(cube, *args, **kwargs):
                 np.where(fill_mask, cube.data.get_fill_value(), new_cube.data.data),
                 mask=new_cube.data.mask,
             )
-            print(new_cube.data)
 
         else:
             # used to normalise the data
