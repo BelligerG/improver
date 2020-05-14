@@ -95,7 +95,7 @@ def collapsed(cube, *args, **kwargs):
 
                 cube_mask = cube[tuple(indices)].data.mask
                 weights_mask = weights[i].mask
-                current_weights = np.where(weights_mask, 0, weights[i].data)
+                current_weights = np.where(weights_mask | cube_mask, 0, weights[i].data)
 
                 fill_mask = fill_mask & cube_mask
 
