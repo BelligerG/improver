@@ -42,6 +42,8 @@ from improver.utilities.cube_manipulation import (
     expand_bounds,
 )
 
+import asyncio
+
 
 class CubeCombiner(BasePlugin):
 
@@ -211,6 +213,20 @@ class CubeCombiner(BasePlugin):
             cube_list = new_list
         return cube_list
 
+    async def load_data(self, cube):
+        cube.data
+        return cube
+
+    async def operator_on_cubeslist(self, cubes):
+        cubes = [asyncio.ensure_future(self.load_data(cube)) for cube in cubes]
+        result = await cubes[0]
+        result = result.copy()
+        for cube in cubes[1:]:
+            cube = await cube
+            result.data = self.operator(result.data, cube.data)
+        return result
+
+    #@profile
     def process(
         self,
         cube_list,
@@ -265,10 +281,23 @@ class CubeCombiner(BasePlugin):
             cube_list = self._setup_coords_for_broadcast(cube_list)
         self._check_dimensions_match(cube_list)
 
+
         # perform operation (add, subtract, min, max, multiply) cumulatively
-        result = cube_list[0].copy()
-        for cube in cube_list[1:]:
-            result.data = self.operator(result.data, cube.data)
+        #result = cube_list[0].copy()
+
+
+        loop = asyncio.get_event_loop()
+        #try:
+        result = loop.run_until_complete(self.operator_on_cubeslist(cube_list))
+        #finally:
+        #loop.close()
+
+        #result = asyncio.run(self.operator_on_cubeslist(cube_list))
+        #for cube in cube_list[1:]:
+        ##    d = cube
+        ##    r = result.data
+        #    result.data = self.operator(result.data, cube.data)
+        ##    result.data = self.operator(r, d)
 
         # normalise mean (for which self.operator is np.add)
         if self.operation == "mean":
